@@ -1,0 +1,13 @@
+appId: com.backlinkforge.app
+productName: BacklinkForge
+asar: true
+directories:
+  output: dist
+files:
+  - dist-electron/**/*
+  - dist/**/*
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
