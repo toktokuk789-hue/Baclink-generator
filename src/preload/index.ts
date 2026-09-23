@@ -128,6 +128,12 @@ export const api = {
     generateBrief: (projectId: string, options: any) => ipcRenderer.invoke(IPC.ASSETS.GENERATE_BRIEF, projectId, options),
     delete: (id: string) => ipcRenderer.invoke(IPC.ASSETS.DELETE, id),
   },
+  outreach: {
+    getMessages: (projectId: string, options?: QueryOptions) => ipcRenderer.invoke(IPC.OUTREACH.GET_MESSAGES, projectId, options),
+    generatePitch: (data: { projectId: string; recipientName?: string; targetDomain?: string; opportunityType?: string; customPrompt?: string }) => ipcRenderer.invoke(IPC.OUTREACH.GENERATE_PITCH, data),
+    sendMessage: (data: any) => ipcRenderer.invoke(IPC.OUTREACH.SEND_MESSAGE, data),
+    updateStatus: (id: string, status: string) => ipcRenderer.invoke(IPC.OUTREACH.UPDATE_STATUS, id, status),
+  },
   on: (channel: string, callback: (...args: any[]) => void) => {
     const subscription = (_event: any, ...args: any[]) => callback(...args);
     ipcRenderer.on(channel, subscription);

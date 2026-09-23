@@ -38,6 +38,8 @@ export function OnboardingPage() {
   // AI Keys
   const [groqKey, setGroqKey] = useState('');
   const [openrouterKey, setOpenrouterKey] = useState('');
+  const [groqModel, setGroqModel] = useState('llama-3.1-8b-instant');
+  const [openrouterModel, setOpenrouterModel] = useState('meta-llama/llama-3.3-70b-instruct');
   const [aiTesting, setAiTesting] = useState(false);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
 
@@ -47,11 +49,13 @@ export function OnboardingPage() {
     setAiStatus(null);
     try {
       if (groqKey) {
-        const res = await api.providers.testGroq(groqKey);
-        setAiStatus(res.success ? 'Groq connected successfully!' : res.message);
+        const res = await api.providers.testGroq(groqKey, groqModel);
+        if (res.activeModel) setGroqModel(res.activeModel);
+        setAiStatus(res.success ? res.message : `Groq error: ${res.message}`);
       } else if (openrouterKey) {
-        const res = await api.providers.testOpenRouter(openrouterKey);
-        setAiStatus(res.success ? 'OpenRouter connected successfully!' : res.message);
+        const res = await api.providers.testOpenRouter(openrouterKey, openrouterModel);
+        if (res.activeModel) setOpenrouterModel(res.activeModel);
+        setAiStatus(res.success ? res.message : `OpenRouter error: ${res.message}`);
       } else {
         setAiStatus('Please enter either a Groq or OpenRouter key to test.');
       }
@@ -95,10 +99,10 @@ export function OnboardingPage() {
 
       // 2. Save Groq / OpenRouter keys if provided
       if (groqKey) {
-        await api.providers.configure('groq', { apiKey: groqKey, model: 'llama-3.3-70b-versatile' });
+        await api.providers.configure('groq', { apiKey: groqKey, model: groqModel || 'llama-3.1-8b-instant' });
       }
       if (openrouterKey) {
-        await api.providers.configure('openrouter', { apiKey: openrouterKey, model: 'anthropic/claude-3.5-sonnet' });
+        await api.providers.configure('openrouter', { apiKey: openrouterKey, model: openrouterModel || 'meta-llama/llama-3.3-70b-instruct' });
       }
 
       navigate('/dashboard');
@@ -291,6 +295,20 @@ export function OnboardingPage() {
                     onChange={(e) => setGroqKey(e.target.value)}
                     className="w-full text-xs font-mono bg-zinc-900 border border-zinc-800 rounded px-3 py-1.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
                   />
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] text-zinc-400">Model:</span>
+                    <select
+                      value={groqModel}
+                      onChange={(e) => setGroqModel(e.target.value)}
+                      className="text-[11px] bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-300 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fastest & Universal)</option>
+                      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Llama 3.3 70B)</option>
+                      <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b (DeepSeek R1)</option>
+                      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Mixtral 32k)</option>
+                      <option value="gemma2-9b-it">gemma2-9b-it (Google Gemma 2 9B)</option>
+                    </select>
+                  </div>
                   <p className="text-[10px] text-zinc-500">
                     Get a key from <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">console.groq.com/keys</a>
                   </p>
@@ -304,7 +322,7 @@ export function OnboardingPage() {
                       <span className="text-xs font-semibold text-zinc-200">OpenRouter API Key (Universal Models)</span>
                     </div>
                     <Badge variant="outline" className="text-[10px] text-purple-400 border-purple-500/30">
-                      Claude 3.5 Sonnet / DeepSeek R1
+                      Claude / DeepSeek
                     </Badge>
                   </div>
                   <input
@@ -314,6 +332,19 @@ export function OnboardingPage() {
                     onChange={(e) => setOpenrouterKey(e.target.value)}
                     className="w-full text-xs font-mono bg-zinc-900 border border-zinc-800 rounded px-3 py-1.5 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
                   />
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] text-zinc-400">Model:</span>
+                    <select
+                      value={openrouterModel}
+                      onChange={(e) => setOpenrouterModel(e.target.value)}
+                      className="text-[11px] bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-300 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct</option>
+                      <option value="deepseek/deepseek-r1">deepseek/deepseek-r1</option>
+                      <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
+                      <option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option>
+                    </select>
+                  </div>
                   <p className="text-[10px] text-zinc-500">
                     Get a key from <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">openrouter.ai/keys</a>
                   </p>

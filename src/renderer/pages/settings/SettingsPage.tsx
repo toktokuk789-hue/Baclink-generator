@@ -78,8 +78,12 @@ export function SettingsPage() {
     try {
       const res = await api.providers.testGroq(groqKey, groqModel);
       setGroqStatus(res);
+      const effectiveModel = res.activeModel || groqModel;
+      if (res.activeModel && res.activeModel !== groqModel) {
+        setGroqModel(res.activeModel);
+      }
       if (res.success) {
-        await api.providers.configure('groq', { apiKey: groqKey, model: groqModel });
+        await api.providers.configure('groq', { apiKey: groqKey, model: effectiveModel });
       }
     } catch (err: any) {
       setGroqStatus({ success: false, message: err.message });
@@ -108,8 +112,12 @@ export function SettingsPage() {
     try {
       const res = await api.providers.testOpenRouter(openrouterKey, openrouterModel);
       setOpenrouterStatus(res);
+      const effectiveModel = res.activeModel || openrouterModel;
+      if (res.activeModel && res.activeModel !== openrouterModel) {
+        setOpenrouterModel(res.activeModel);
+      }
       if (res.success) {
-        await api.providers.configure('openrouter', { apiKey: openrouterKey, model: openrouterModel });
+        await api.providers.configure('openrouter', { apiKey: openrouterKey, model: effectiveModel });
       }
     } catch (err: any) {
       setOpenrouterStatus({ success: false, message: err.message });
@@ -263,17 +271,24 @@ export function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-zinc-300">Model Selection</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-zinc-300">Model Selection</label>
+                    <span className="text-[10px] text-zinc-400 font-mono">Active: {groqModel}</span>
+                  </div>
                   <select
                     value={groqModel}
                     onChange={(e) => setGroqModel(e.target.value)}
                     className="mt-1 w-full text-xs bg-zinc-950 border border-zinc-800 rounded px-3 py-2 text-zinc-200 focus:outline-none focus:border-blue-500"
                   >
-                    <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Recommended - High Reasoning)</option>
-                    <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b (Deep Reasoning & Strategy)</option>
-                    <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (High Context 32k)</option>
-                    <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Ultra Fast Extraction)</option>
+                    <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fastest & Universally Available)</option>
+                    <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Meta Llama 3.3 70B)</option>
+                    <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b (DeepSeek R1 Reasoning)</option>
+                    <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Mixtral 32k Context)</option>
+                    <option value="gemma2-9b-it">gemma2-9b-it (Google Gemma 2 9B)</option>
+                    <option value="llama3-70b-8192">llama3-70b-8192 (Llama 3 70B)</option>
+                    <option value="llama3-8b-8192">llama3-8b-8192 (Llama 3 8B)</option>
                   </select>
+                  <p className="text-[10px] text-zinc-500 mt-1">If a model returns 404 on your account, the connection tester will auto-fallback to active models.</p>
                 </div>
 
                 {groqStatus && (

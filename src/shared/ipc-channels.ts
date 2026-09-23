@@ -124,4 +124,10 @@ export const IPC = {
     GENERATE_BRIEF: 'assets:generateBrief',
     DELETE: 'assets:delete',
   },
+  OUTREACH: {
+    GET_MESSAGES: 'outreach:getMessages',
+    GENERATE_PITCH: 'outreach:generatePitch',
+    SEND_MESSAGE: 'outreach:sendMessage',
+    UPDATE_STATUS: 'outreach:updateStatus',
+  },
 } as const;
