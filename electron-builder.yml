@@ -6,8 +6,12 @@ directories:
 files:
   - dist-electron/**/*
   - dist/**/*
+extraResources:
+  - from: migrations
+    to: migrations
 win:
   target: nsis
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  artifactName: BacklinkForge-Setup.exe
