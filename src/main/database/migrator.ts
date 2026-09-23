@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { DBConnection } from './connection';
+import { Database } from './connection';
 
 export class Migrator {
   private migrationsDir: string;
@@ -10,7 +10,7 @@ export class Migrator {
   }
 
   public runMigrations(): void {
-    const db = DBConnection.getInstance().getDb();
+    const db = Database.getInstance().getDb();
 
     // Create migrations table if it doesn't exist
     db.exec(`

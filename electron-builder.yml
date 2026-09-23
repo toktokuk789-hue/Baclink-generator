@@ -4,8 +4,8 @@ asar: true
 directories:
   output: dist
 files:
-  - dist-electron/**/*
-  - dist/**/*
+  - out/**/*
+  - package.json
 extraResources:
   - from: migrations
     to: migrations
