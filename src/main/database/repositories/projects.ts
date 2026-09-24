@@ -19,7 +19,7 @@ export interface Project {
 }
 
 export class ProjectRepository extends BaseRepository<Project> {
-  constructor() {
+  constructor(_db?: any) {
     super('projects');
   }
 

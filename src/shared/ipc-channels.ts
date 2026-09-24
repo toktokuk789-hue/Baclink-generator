@@ -29,6 +29,8 @@ export const IPC = {
     GET_BY_PROJECT: 'domains:getByProject',
     CREATE: 'domains:create',
     UPDATE: 'domains:update',
+    DELETE: 'domains:delete',
+    INSPECT: 'domains:inspect',
   },
   PAGES: {
     GET_BY_PROJECT: 'pages:getByProject',
@@ -80,6 +82,7 @@ export const IPC = {
     GET_STATUS: 'providers:getStatus',
     TEST_GROQ: 'providers:testGroq',
     TEST_OPENROUTER: 'providers:testOpenRouter',
+    GET_GROQ_MODELS: 'providers:getGroqModels',
   },
   IMPORT: {
     CSV: 'import:csv',

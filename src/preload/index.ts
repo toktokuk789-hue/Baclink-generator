@@ -33,6 +33,8 @@ export const api = {
     getByProject: (projectId: string, options?: QueryOptions) => ipcRenderer.invoke(IPC.DOMAINS.GET_BY_PROJECT, projectId, options),
     create: (data: any) => ipcRenderer.invoke(IPC.DOMAINS.CREATE, data),
     update: (id: string, data: any) => ipcRenderer.invoke(IPC.DOMAINS.UPDATE, id, data),
+    delete: (id: string) => ipcRenderer.invoke(IPC.DOMAINS.DELETE, id),
+    inspect: (domain: string, projectContext?: any) => ipcRenderer.invoke(IPC.DOMAINS.INSPECT, domain, projectContext),
   },
   pages: {
     getByProject: (projectId: string, options?: QueryOptions) => ipcRenderer.invoke(IPC.PAGES.GET_BY_PROJECT, projectId, options),
@@ -84,6 +86,7 @@ export const api = {
     getStatus: (providerId: string) => ipcRenderer.invoke(IPC.PROVIDERS.GET_STATUS, providerId),
     testGroq: (apiKey: string, model?: string) => ipcRenderer.invoke(IPC.PROVIDERS.TEST_GROQ, apiKey, model),
     testOpenRouter: (apiKey: string, model?: string) => ipcRenderer.invoke(IPC.PROVIDERS.TEST_OPENROUTER, apiKey, model),
+    getGroqModels: (apiKey: string) => ipcRenderer.invoke(IPC.PROVIDERS.GET_GROQ_MODELS, apiKey),
   },
   import: {
     csv: (filePath: string, mapping?: any) => ipcRenderer.invoke(IPC.IMPORT.CSV, filePath, mapping),

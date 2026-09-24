@@ -1,6 +1,8 @@
 {
   "name": "backlinkforge",
   "version": "0.1.0",
+  "description": "BacklinkForge - Autonomous SEO Intelligence and Link Building Platform",
+  "author": "Daniyal (WhatsApp: 03325396994)",
   "main": "out/main/app.js",
   "scripts": {
     "dev": "electron-vite dev",

@@ -47,70 +47,90 @@ export class LLMProviderService {
   /**
    * Test connection to Groq API with automatic fallback to active models
    */
-  public async testGroq(apiKey: string, preferredModel?: string): Promise<{ success: boolean; message: string; activeModel?: string }> {
+  public async testGroq(apiKey: string, preferredModel?: string): Promise<{ success: boolean; message: string; activeModel?: string; availableModels?: string[] }> {
     try {
       if (!apiKey || apiKey.trim().length === 0) {
         return { success: false, message: 'Groq API Key is empty.' };
       }
 
       const key = apiKey.trim();
-      // Candidate models in order of priority: preferred model, then ultra-reliable 8b, then 70b variants
-      const candidates = [
-        preferredModel,
-        'llama-3.1-8b-instant',
-        'llama-3.3-70b-versatile',
-        'deepseek-r1-distill-llama-70b',
-        'mixtral-8x7b-32768'
-      ].filter(Boolean) as string[];
 
-      // Deduplicate
-      const uniqueCandidates = Array.from(new Set(candidates));
+      // Step 1: Query models list from Groq to verify key and obtain allowed models
+      let availableModels: string[] = [];
+      try {
+        const modelsRes = await request('https://api.groq.com/openai/v1/models', {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${key}` },
+        });
 
-      let lastError = '';
-
-      for (const model of uniqueCandidates) {
-        try {
-          const response = await request('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${key}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [{ role: 'user', content: 'Respond with "Groq verified"' }],
-              max_tokens: 15,
-            }),
-          });
-
-          if (response.statusCode === 200) {
-            const body = (await response.body.json()) as any;
-            const text = body.choices?.[0]?.message?.content || 'Verified';
-            const fallbackNote = preferredModel && preferredModel !== model 
-              ? ` (Switched from ${preferredModel} to active model ${model})` 
-              : ` (${model})`;
-            return {
-              success: true,
-              message: `Successfully connected to Groq!${fallbackNote} Response: "${text.trim()}"`,
-              activeModel: model,
-            };
-          } else {
-            const errBody = await response.body.text();
-            lastError = `HTTP ${response.statusCode}: ${errBody}`;
-            // If model not found or access denied, continue trying next candidate model
-            if (response.statusCode === 404 || errBody.includes('model_not_found') || errBody.includes('does not exist')) {
-              continue;
-            } else {
-              // Other error (e.g. 401 invalid key, rate limit, etc.)
-              return { success: false, message: `Groq error (${response.statusCode}): ${errBody}` };
-            }
-          }
-        } catch (innerErr: any) {
-          lastError = innerErr.message;
+        if (modelsRes.statusCode === 401) {
+          return { success: false, message: 'Invalid Groq API Key (HTTP 401). Please check your key at console.groq.com/keys' };
         }
+
+        if (modelsRes.statusCode === 200) {
+          const body = (await modelsRes.body.json()) as any;
+          if (Array.isArray(body?.data)) {
+            availableModels = body.data
+              .map((m: any) => m.id as string)
+              .filter((id: string) => !id.includes('whisper') && !id.includes('guard') && !id.includes('safeguard'));
+          }
+        }
+      } catch (err: any) {
+        console.warn('Could not query Groq models endpoint directly:', err.message);
       }
 
-      return { success: false, message: `Groq connection failed across models. Last error: ${lastError}` };
+      // Determine which model to test
+      let targetModel = preferredModel || 'llama-3.1-8b-instant';
+      if (availableModels.length > 0) {
+        if (preferredModel && availableModels.includes(preferredModel)) {
+          targetModel = preferredModel;
+        } else if (availableModels.includes('llama-3.1-8b-instant')) {
+          targetModel = 'llama-3.1-8b-instant';
+        } else if (availableModels.includes('llama-3.3-70b-versatile')) {
+          targetModel = 'llama-3.3-70b-versatile';
+        } else {
+          targetModel = availableModels[0];
+        }
+      } else {
+        // Fallback default
+        targetModel = 'llama-3.1-8b-instant';
+      }
+
+      // Step 2: Test completion with selected target model
+      const response = await request('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [{ role: 'user', content: 'Respond with "Groq verified"' }],
+          max_tokens: 15,
+        }),
+      });
+
+      if (response.statusCode === 200) {
+        const body = (await response.body.json()) as any;
+        const text = body.choices?.[0]?.message?.content || 'Verified';
+        const modelNote = preferredModel && preferredModel !== targetModel
+          ? ` (Auto-selected active model: ${targetModel})`
+          : ` (${targetModel})`;
+
+        return {
+          success: true,
+          message: `Successfully connected to Groq!${modelNote} Response: "${text.trim()}"`,
+          activeModel: targetModel,
+          availableModels,
+        };
+      } else {
+        const errText = await response.body.text();
+        return {
+          success: false,
+          message: `Groq error (HTTP ${response.statusCode}): ${errText}`,
+          availableModels,
+        };
+      }
     } catch (err: any) {
       return { success: false, message: `Groq connection failed: ${err.message}` };
     }

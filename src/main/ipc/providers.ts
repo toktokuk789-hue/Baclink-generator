@@ -15,6 +15,10 @@ export function registerProviderHandlers(db: Database) {
     return llmService.testOpenRouter(apiKey, model);
   });
 
+  ipcMain.handle(IPC.PROVIDERS.GET_GROQ_MODELS, async (_event, apiKey: string) => {
+    return llmService.getGroqModels(apiKey);
+  });
+
   ipcMain.handle(IPC.PROVIDERS.CONFIGURE, async (_event, providerId: string, config: any) => {
     // Save to settings table
     const key = `provider_${providerId}`;
