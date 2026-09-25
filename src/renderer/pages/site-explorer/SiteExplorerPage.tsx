@@ -4,7 +4,7 @@ import { useAppStore } from '../../stores/app-store';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../../components/ui';
 import { 
   Search, Play, Square, RefreshCw, ExternalLink, Globe, 
-  FileText, Link2, CheckCircle2, AlertTriangle, ShieldCheck
+  FileText, Link2, CheckCircle2, AlertTriangle, ShieldCheck, AlertCircle
 } from 'lucide-react';
 
 export function SiteExplorerPage() {
@@ -14,6 +14,7 @@ export function SiteExplorerPage() {
   const [url, setUrl] = useState('');
   const [maxPages, setMaxPages] = useState(25);
   const [crawling, setCrawling] = useState(false);
+  const [crawlError, setCrawlError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number; status: string; url: string }>({
     current: 0,
     total: 0,
@@ -32,6 +33,32 @@ export function SiteExplorerPage() {
     }
   }, [currentProjectId, activeProject]);
 
+  // Real-time listener for crawler page events
+  useEffect(() => {
+    if (!api?.on) return;
+    const unsubscribe = api.on('crawler:page-crawled', (data: any) => {
+      if (data?.page) {
+        setPages(prev => {
+          const exists = prev.some(p => p.url === data.page.url);
+          return exists ? prev : [data.page, ...prev];
+        });
+      }
+      if (data?.current !== undefined) {
+        setProgress(p => ({
+          ...p,
+          current: data.current,
+          total: data.total || p.total,
+          url: data.page?.url || p.url,
+          status: 'running'
+        }));
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [api]);
+
   const loadPages = async () => {
     if (!api?.pages || !currentProjectId) return;
     try {
@@ -47,19 +74,23 @@ export function SiteExplorerPage() {
     if (!url.trim() || !api?.crawler) return;
 
     setCrawling(true);
-    setProgress({ current: 0, total: maxPages, status: 'running', url });
+    setCrawlError(null);
+    setProgress({ current: 0, total: maxPages, status: 'running', url: url.trim() });
 
     try {
-      const res = await api.crawler.crawlSite(url, {
+      const res = await api.crawler.crawlSite(url.trim(), {
         projectId: currentProjectId,
         maxPages: Number(maxPages) || 25,
       });
 
       if (res?.success) {
         await loadPages();
+      } else if (res?.error) {
+        setCrawlError(res.error);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Crawl failed:', err);
+      setCrawlError(err?.message || 'Crawl failed to execute');
     } finally {
       setCrawling(false);
       setProgress(p => ({ ...p, status: 'completed' }));
@@ -71,6 +102,7 @@ export function SiteExplorerPage() {
     try {
       await api.crawler.stop('crawler-task');
       setCrawling(false);
+      setProgress(p => ({ ...p, status: 'stopped' }));
     } catch (err) {
       console.error('Stop crawl failed:', err);
     }
@@ -86,15 +118,34 @@ export function SiteExplorerPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* HEADER */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
-          <Search className="text-blue-500" />
-          Site Explorer & Crawler
-        </h1>
-        <p className="text-xs text-zinc-400 mt-0.5">
-          Crawl website structures, inspect on-page SEO signals, internal links, and indexability.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-100 flex items-center gap-2">
+            <Search className="text-blue-500" />
+            Site Explorer & Crawler
+          </h1>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Crawl website structures, inspect on-page SEO signals, internal links, and indexability.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={loadPages}>
+          <RefreshCw size={13} className="mr-1.5" />
+          Refresh Pages
+        </Button>
       </div>
+
+      {/* ERROR BANNER */}
+      {crawlError && (
+        <div className="p-3.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-400 shrink-0" />
+            <span>{crawlError}</span>
+          </div>
+          <button onClick={() => setCrawlError(null)} className="text-red-400 hover:text-red-200 text-xs font-semibold">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* CRAWL CONTROLS */}
       <Card className="bg-zinc-900 border-zinc-800">
@@ -124,14 +175,14 @@ export function SiteExplorerPage() {
               />
 
               {!crawling ? (
-                <Button variant="primary" type="submit">
+                <Button variant="primary" type="submit" disabled={!url.trim()}>
                   <Play size={13} className="mr-1.5 fill-current" />
                   Start Crawl
                 </Button>
               ) : (
                 <Button variant="secondary" type="button" onClick={handleStopCrawl} className="text-red-400 border-red-500/30">
                   <Square size={13} className="mr-1.5 fill-current" />
-                  Stop
+                  Stop Crawl
                 </Button>
               )}
             </div>
@@ -144,12 +195,12 @@ export function SiteExplorerPage() {
                   <RefreshCw size={13} className="animate-spin text-blue-400" />
                   Crawling: <strong className="font-mono text-blue-400 truncate max-w-md">{progress.url || url}</strong>
                 </span>
-                <span>{progress.current} pages crawled</span>
+                <span>{progress.current} / {maxPages} pages crawled</span>
               </div>
               <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden">
                 <div 
                   className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(100, Math.max(10, (progress.current / maxPages) * 100))}%` }}
+                  style={{ width: `${Math.min(100, Math.max(5, (progress.current / maxPages) * 100))}%` }}
                 />
               </div>
             </div>

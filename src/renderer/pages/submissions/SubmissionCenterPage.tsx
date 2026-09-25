@@ -58,7 +58,7 @@ export function SubmissionCenterPage() {
   const [qualFilter, setQualFilter] = useState<string>('all');
 
   // Human Handoff modal / banner state
-  const [humanActionAttempt, setHumanActionAttempt] = useState<{ id: string; reason: string; platform: string } | null>(null);
+  const [humanActionAttempt, setHumanActionAttempt] = useState<{ id: string; reason: string; platform: string; submissionUrl?: string } | null>(null);
 
   // PDF Generator Modal
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -139,16 +139,18 @@ export function SubmissionCenterPage() {
         mode: 'browser_assisted'
       });
 
-      if (res.humanActionRequired) {
+      if (res?.humanActionRequired) {
         setHumanActionAttempt({
-          id: res.attempt.id,
+          id: res.attempt?.id || target.id,
           reason: res.reason,
-          platform: target.platform_name
+          platform: target.platform_name,
+          submissionUrl: res.submissionUrl || target.submission_url
         });
       }
       await loadAllData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Submission execution failed:', err);
+      alert(`Submission execution failed: ${err?.message || err}`);
     }
   };
 
@@ -158,8 +160,9 @@ export function SubmissionCenterPage() {
       await api.submissions.resumeAfterHuman(humanActionAttempt.id);
       setHumanActionAttempt(null);
       await loadAllData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Resume failed:', err);
+      alert(`Resume failed: ${err?.message || err}`);
     }
   };
 
@@ -288,10 +291,27 @@ export function SubmissionCenterPage() {
             <div>
               <div className="font-semibold text-amber-300">HUMAN ACTION REQUIRED — {humanActionAttempt.platform}</div>
               <p className="text-xs text-zinc-300 mt-0.5">{humanActionAttempt.reason}</p>
-              <p className="text-xs text-zinc-400 mt-1">Complete any CAPTCHA or verification challenge in Chrome, then click Resume.</p>
+              <p className="text-xs text-zinc-400 mt-1">Complete any CAPTCHA or verification challenge in Chrome, then click Confirm & Resume.</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {humanActionAttempt.submissionUrl && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (api?.browser?.openUrl) {
+                    api.browser.openUrl(humanActionAttempt.submissionUrl!);
+                  } else {
+                    window.open(humanActionAttempt.submissionUrl, '_blank');
+                  }
+                }}
+                className="text-xs text-zinc-200"
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                Re-open in Chrome
+              </Button>
+            )}
             <Button variant="primary" size="sm" onClick={handleResumeHumanAction} className="bg-amber-600 hover:bg-amber-500 text-white">
               <UserCheck className="w-4 h-4 mr-1.5" />
               Confirm & Resume Agent

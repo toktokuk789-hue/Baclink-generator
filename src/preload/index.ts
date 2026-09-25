@@ -76,8 +76,8 @@ export const api = {
   },
   crawler: {
     crawlSite: (url: string, options?: any) => ipcRenderer.invoke(IPC.CRAWLER.CRAWL_SITE, url, options),
-    getProgress: (taskId: string) => ipcRenderer.invoke(IPC.CRAWLER.GET_PROGRESS, taskId),
-    stop: (taskId: string) => ipcRenderer.invoke(IPC.CRAWLER.STOP, taskId),
+    getProgress: (taskId?: string) => ipcRenderer.invoke(IPC.CRAWLER.GET_PROGRESS, taskId),
+    stop: (taskId?: string) => ipcRenderer.invoke(IPC.CRAWLER.STOP, taskId),
   },
   providers: {
     getAll: () => ipcRenderer.invoke(IPC.PROVIDERS.GET_ALL),

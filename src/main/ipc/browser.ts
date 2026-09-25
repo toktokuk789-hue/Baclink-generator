@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, shell } from 'electron';
 import { IPC } from '../../shared/ipc-channels';
 import { BrowserHub } from '../browser/browser-hub';
 
@@ -18,7 +18,20 @@ export function registerBrowserHandlers() {
   });
 
   ipcMain.handle(IPC.BROWSER.OPEN_URL, async (_event, url: string) => {
-    return hub.openUrl(url);
+    let cleanUrl = url.trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+    try {
+      if (hub.getStatus().status === 'connected') {
+        return await hub.openUrl(cleanUrl);
+      }
+      await shell.openExternal(cleanUrl);
+      return { url: cleanUrl, title: cleanUrl };
+    } catch {
+      await shell.openExternal(cleanUrl);
+      return { url: cleanUrl, title: cleanUrl };
+    }
   });
 
   ipcMain.handle(IPC.BROWSER.GET_PAGE_CONTENT, async () => {

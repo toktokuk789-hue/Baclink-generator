@@ -1,5 +1,4 @@
 import * as cheerio from 'cheerio';
-import { request } from 'undici';
 import { Page } from '../../shared/types';
 import crypto from 'crypto';
 
@@ -10,6 +9,15 @@ export interface CrawlOptions {
   maxDepth?: number;
   onPageCrawled?: (page: Partial<Page>, current: number, total: number) => void;
 }
+
+const STATIC_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico',
+  '.pdf', '.zip', '.tar', '.gz', '.rar', '.7z',
+  '.css', '.js', '.mjs', '.map',
+  '.mp4', '.mp3', '.webm', '.ogg', '.wav',
+  '.woff', '.woff2', '.ttf', '.eot',
+  '.xml', '.json', '.txt'
+]);
 
 export class CrawlerService {
   private isCancelled = false;
@@ -23,42 +31,80 @@ export class CrawlerService {
    */
   public async crawlSite(options: CrawlOptions): Promise<Partial<Page>[]> {
     this.isCancelled = false;
-    const maxPages = options.maxPages || 30;
+    const maxPages = Math.min(Math.max(options.maxPages || 25, 1), 100);
     const maxDepth = options.maxDepth || 3;
 
-    const baseObj = new URL(options.baseUrl);
-    const origin = baseObj.origin.toLowerCase();
-    const hostname = baseObj.hostname.toLowerCase().replace(/^www\./, '');
+    // Clean and validate base URL
+    let startUrl = options.baseUrl.trim();
+    if (!startUrl.startsWith('http://') && !startUrl.startsWith('https://')) {
+      startUrl = `https://${startUrl}`;
+    }
 
+    let initialUrl: URL;
+    try {
+      initialUrl = new URL(startUrl);
+    } catch {
+      throw new Error(`Invalid target URL: "${options.baseUrl}"`);
+    }
+
+    let primaryHostname = initialUrl.hostname.toLowerCase().replace(/^www\./, '');
     const visited = new Set<string>();
-    const queue: { url: string; depth: number }[] = [{ url: options.baseUrl, depth: 0 }];
+    const queued = new Set<string>();
+
+    const queue: { url: string; depth: number }[] = [{ url: startUrl, depth: 0 }];
+    queued.add(this.normalizeUrl(startUrl));
+
     const crawledPages: Partial<Page>[] = [];
 
     while (queue.length > 0 && crawledPages.length < maxPages && !this.isCancelled) {
-      const { url, depth } = queue.shift()!;
+      const item = queue.shift();
+      if (!item) break;
+
+      const { url, depth } = item;
       const normalizedUrl = this.normalizeUrl(url);
 
       if (visited.has(normalizedUrl)) continue;
       visited.add(normalizedUrl);
 
       try {
-        const response = await request(normalizedUrl, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 BacklinkForge-Crawler/1.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          },
-          maxRedirections: 3,
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        const statusCode = response.statusCode;
-        const contentType = response.headers['content-type'] as string || '';
+        let response: Response;
+        try {
+          response = await fetch(normalizedUrl, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+            redirect: 'follow',
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        const statusCode = response.status;
+        const contentType = response.headers.get('content-type') || '';
+
+        // If redirected to a canonical domain (e.g. naked to www or vice versa), adapt primary hostname
+        try {
+          const finalUrl = new URL(response.url);
+          const finalHost = finalUrl.hostname.toLowerCase().replace(/^www\./, '');
+          if (finalHost.includes(primaryHostname) || primaryHostname.includes(finalHost)) {
+            primaryHostname = finalHost;
+          }
+        } catch {
+          // ignore
+        }
 
         if (!contentType.includes('text/html')) {
           continue;
         }
 
-        const html = await response.body.text();
+        const html = await response.text();
         const $ = cheerio.load(html);
 
         const title = $('title').first().text().trim() || null;
@@ -77,18 +123,27 @@ export class CrawlerService {
 
         $('a[href]').each((_, el) => {
           const rawHref = $(el).attr('href');
-          if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:')) {
+          if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
             return;
           }
 
           try {
-            const absoluteUrl = new URL(rawHref, normalizedUrl).href;
+            const absoluteUrl = new URL(rawHref, response.url || normalizedUrl).href;
             const parsed = new URL(absoluteUrl);
             const linkHost = parsed.hostname.toLowerCase().replace(/^www\./, '');
 
-            if (linkHost === hostname) {
+            // Skip static media files
+            const pathname = parsed.pathname.toLowerCase();
+            const ext = pathname.substring(pathname.lastIndexOf('.'));
+            if (STATIC_EXTENSIONS.has(ext)) {
+              return;
+            }
+
+            if (linkHost === primaryHostname) {
               internalLinksCount++;
-              if (depth + 1 <= maxDepth && !visited.has(this.normalizeUrl(absoluteUrl))) {
+              const normAbs = this.normalizeUrl(absoluteUrl);
+              if (depth + 1 <= maxDepth && !visited.has(normAbs) && !queued.has(normAbs) && queued.size < maxPages * 3) {
+                queued.add(normAbs);
                 queue.push({ url: absoluteUrl, depth: depth + 1 });
               }
             } else {
@@ -107,14 +162,14 @@ export class CrawlerService {
         }
 
         // Word count estimate
-        $('script, style, noscript').remove();
+        $('script, style, noscript, svg').remove();
         const text = $('body').text().replace(/\s+/g, ' ').trim();
         const wordCount = text ? text.split(' ').length : 0;
 
         const pageRecord: Partial<Page> = {
           id: crypto.randomUUID(),
           project_id: options.projectId,
-          url: normalizedUrl,
+          url: response.url || normalizedUrl,
           title,
           meta_description: metaDescription,
           h1,
@@ -138,16 +193,21 @@ export class CrawlerService {
           options.onPageCrawled(pageRecord, crawledPages.length, maxPages);
         }
       } catch (err: any) {
-        // Record failed crawl
+        // Record failed crawl attempt for this URL
         crawledPages.push({
           id: crypto.randomUUID(),
           project_id: options.projectId,
           url: normalizedUrl,
+          title: `Error: ${err.message || 'Connection failed'}`,
           http_status: 0,
           depth,
           is_indexable: 0,
           crawled_at: new Date().toISOString(),
         });
+
+        if (options.onPageCrawled) {
+          options.onPageCrawled(crawledPages[crawledPages.length - 1], crawledPages.length, maxPages);
+        }
       }
     }
 
@@ -158,7 +218,7 @@ export class CrawlerService {
     try {
       const parsed = new URL(rawUrl);
       parsed.hash = ''; // strip hash
-      // strip standard tracking params
+      // strip standard marketing & tracking params
       ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'].forEach(p => parsed.searchParams.delete(p));
       let str = parsed.href;
       if (str.endsWith('/') && parsed.pathname !== '/') {

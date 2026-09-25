@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, shell } from 'electron';
 import { IPC } from '../../shared/ipc-channels';
 import { SubmissionRepository } from '../database/repositories/submissions';
 import { BusinessProfileRepository } from '../database/repositories/business-profiles';
@@ -7,6 +7,7 @@ import { SubmissionDiscoveryAgent } from '../agents/submission/submission-discov
 import { SubmissionQualificationAgent } from '../agents/submission/submission-qualification';
 import { SubmissionVerifierAgent } from '../agents/submission/submission-verifier';
 import { ProfileBuilderAgent } from '../agents/submission/profile-builder';
+import { BrowserHub } from '../browser/browser-hub';
 import crypto from 'crypto';
 
 export function registerSubmissionHandlers(
@@ -94,7 +95,34 @@ export function registerSubmissionHandlers(
     const target = subRepo.getTargetById(targetId);
     if (!target) throw new Error('Target not found');
 
-    // Create attempt
+    let cleanUrl = (target.submission_url || '').trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `https://${cleanUrl}`;
+    }
+
+    // Open target submission URL in Chrome or default browser
+    let openedVia = 'browser';
+    try {
+      const browserHub = BrowserHub.getInstance();
+      const status = browserHub.getStatus();
+      if (status.status === 'connected') {
+        await browserHub.openUrl(cleanUrl);
+        openedVia = 'chrome_cdp';
+      } else {
+        await shell.openExternal(cleanUrl);
+        openedVia = 'default_browser';
+      }
+    } catch (openErr) {
+      console.warn('BrowserHub openUrl failed, falling back to shell.openExternal:', openErr);
+      try {
+        await shell.openExternal(cleanUrl);
+        openedVia = 'default_browser';
+      } catch (shellErr) {
+        console.error('shell.openExternal failed:', shellErr);
+      }
+    }
+
+    // Create attempt record
     const attempt = subRepo.createAttempt({
       id: crypto.randomUUID(),
       target_id: targetId,
@@ -103,7 +131,7 @@ export function registerSubmissionHandlers(
       asset_id: options?.assetId || null,
       mode: options?.mode || 'browser_assisted',
       status: 'waiting_human_action', // Responsible Automation: Human-in-the-loop protection
-      human_action_reason: 'Please review the destination form in Chrome and complete any CAPTCHA, MFA, or final confirmation.',
+      human_action_reason: `Opened ${target.platform_name} in Chrome. Please complete any CAPTCHA, login, or form fields, then click Confirm & Resume.`,
       submitted_data: JSON.stringify(options?.data || {}),
       started_at: new Date().toISOString()
     });
@@ -113,7 +141,10 @@ export function registerSubmissionHandlers(
     return {
       attempt,
       humanActionRequired: true,
-      reason: attempt.human_action_reason
+      reason: attempt.human_action_reason,
+      submissionUrl: cleanUrl,
+      platform: target.platform_name,
+      openedVia
     };
   });
 
